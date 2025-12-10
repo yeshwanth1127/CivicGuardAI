@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const DEV_SERVER_IP = "10.177.194.179";
+const DEV_SERVER_IP = "10.47.147.234";
 const PORT = 5000;
 
 export const API_BASE_URL = `http://${DEV_SERVER_IP}:${PORT}`;
