@@ -2,6 +2,23 @@ const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
 
 const statuses = ['Open', 'In Progress', 'Resolved'];
+const categories = [
+  'Pothole',
+  'Garbage',
+  'Streetlight',
+  'Sidewalk',
+  'Flooding',
+  'Road Sign',
+  'Other',
+];
+const departments = [
+  'Roads & Infrastructure',
+  'Sanitation & Waste Management',
+  'Electrical & Street Lighting',
+  'Water & Drainage',
+  'Parks & Public Spaces',
+  'General Administration',
+];
 
 const Issue = sequelize.define(
   'Issue',
@@ -58,10 +75,48 @@ const Issue = sequelize.define(
       allowNull: false,
       defaultValue: false,
     },
+    // CNN-predicted issue category. STRING (not ENUM) so it can be added to
+    // the existing table via a plain ALTER TABLE in the migration script,
+    // with the allowed values enforced at the application layer instead.
+    // All 7 category labels are kept under 20 chars to fit this column.
+    category: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      validate: {
+        isIn: [categories],
+      },
+    },
+    classification_confidence: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+    },
+    // Which municipal department this issue has been routed to. STRING (not
+    // ENUM) for the same reason as `category` — a plain ALTER TABLE can add
+    // it to the existing table, with allowed values enforced at the app layer.
+    department: {
+      type: DataTypes.STRING(60),
+      allowNull: true,
+      validate: {
+        isIn: [departments],
+      },
+    },
     status: {
       type: DataTypes.ENUM(...statuses),
       allowNull: false,
       defaultValue: 'Open',
+    },
+    // Short public-facing code (e.g. "CF-7K2M9Q") a citizen can use to look up
+    // their report on the no-login /track page. Generated once at creation.
+    tracking_code: {
+      type: DataTypes.STRING(12),
+      allowNull: true,
+    },
+    // Set the first time status transitions to 'Resolved' — powers the
+    // resolution-time metric on the admin analytics dashboard. Left null
+    // otherwise; created_at already covers the "reported at" timestamp.
+    resolved_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
   },
   {
@@ -76,4 +131,6 @@ const Issue = sequelize.define(
 module.exports = {
   Issue,
   statuses,
+  categories,
+  departments,
 };

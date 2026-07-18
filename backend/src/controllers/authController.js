@@ -3,16 +3,19 @@ const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
 const { User, roles } = require('../models');
 
-const buildToken = (userId, role) =>
-  jwt.sign({ userId, role }, process.env.JWT_SECRET, {
-    expiresIn: '12h',
-  });
+const buildToken = (user) =>
+  jwt.sign(
+    { userId: user.id, role: user.role, department: user.department || null, email: user.email },
+    process.env.JWT_SECRET,
+    { expiresIn: '12h' }
+  );
 
 const sanitizeUser = (user) => ({
   id: user.id,
   name: user.name,
   email: user.email,
   role: user.role,
+  department: user.department || null,
 });
 
 const register = async (req, res, next) => {
@@ -44,7 +47,7 @@ const register = async (req, res, next) => {
       role: 'citizen',
     });
 
-    const token = buildToken(user.id, user.role);
+    const token = buildToken(user);
     return res.status(201).json({ user: sanitizeUser(user), token });
   } catch (error) {
     return next(error);
@@ -70,7 +73,7 @@ const login = async (req, res, next) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    const token = buildToken(user.id, user.role);
+    const token = buildToken(user);
     return res.json({ user: sanitizeUser(user), token });
   } catch (error) {
     return next(error);
@@ -80,7 +83,7 @@ const login = async (req, res, next) => {
 const getUsers = async (req, res, next) => {
   try {
     const users = await User.findAll({
-      attributes: ['id', 'name', 'email', 'role', 'created_at', 'updated_at'],
+      attributes: ['id', 'name', 'email', 'role', 'department', 'created_at', 'updated_at'],
       order: [['created_at', 'DESC']],
     });
     return res.json({ users, count: users.length });

@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+raw_dataset/
+dataset/
+
+artifacts/runs/
+artifacts/winning_model/
+artifacts/confusion_matrices/
+artifacts/training_curves/
+artifacts/comparison_results.json

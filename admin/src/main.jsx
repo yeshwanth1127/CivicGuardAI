@@ -1,29 +1,11 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#1976d2', // Blue color as specified
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-  },
-  typography: {
-    fontFamily: [
-      'Roboto',
-      '-apple-system',
-      'BlinkMacSystemFont',
-      '"Segoe UI"',
-      'Arial',
-      'sans-serif',
-    ].join(','),
-  },
-});
+import theme from './theme.js';
+import 'leaflet/dist/leaflet.css';
+import './global.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

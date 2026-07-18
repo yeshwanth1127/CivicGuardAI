@@ -2,7 +2,29 @@ const { validationResult } = require('express-validator');
 const { Issue, statuses } = require('../models');
 const { reverseGeocode } = require('../utils/geocoding');
 const { computePHash, findSimilarImages } = require('../utils/phash');
+const { classifyImage } = require('../utils/classifier');
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+
+// Generates a short, human-shareable code (e.g. "CF-7K2M9Q") a citizen can
+// use to check on their report later without an account. Excludes visually
+// ambiguous characters (0/O, 1/I). Checked against existing rows since the
+// column has no DB-level unique constraint (added via a plain ALTER TABLE
+// migration on existing installs, so it can't easily gain one retroactively).
+const TRACKING_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+async function generateUniqueTrackingCode() {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    let code = 'CF-';
+    for (let i = 0; i < 6; i++) {
+      code += TRACKING_CODE_CHARS[crypto.randomInt(TRACKING_CODE_CHARS.length)];
+    }
+    // eslint-disable-next-line no-await-in-loop
+    const existing = await Issue.findOne({ where: { tracking_code: code } });
+    if (!existing) return code;
+  }
+  throw new Error('Failed to generate a unique tracking code');
+}
 
 // EXIF + geo distance validation
 // We use exiftool to read EXIF metadata from uploaded images (if present)
@@ -93,6 +115,13 @@ const createIssue = async (req, res, next) => {
       needs_review = true;
     }
 
+    // Lets a submitter explicitly bypass EXIF/GPS metadata verification (e.g.
+    // desktop browser uploads commonly strip EXIF data, which would otherwise
+    // hard-block a legitimate report). Bypassing never skips fraud review —
+    // it always forces needs_review so staff manually verify the photo.
+    const skipMetadataCheck =
+      req.body.skip_metadata_check === 'true' || req.body.skip_metadata_check === true;
+
     // Reverse geocode coordinates to get address
     let address = null;
     try {
@@ -106,7 +135,10 @@ const createIssue = async (req, res, next) => {
       console.warn('⚠️  Geocoding error:', geocodeError.message);
       address = null; // Will be set by reverseGeocode function
     }
-    if (req.file) {
+    if (req.file && skipMetadataCheck) {
+      console.log('⚠️  Metadata verification bypassed by submitter — flagging for manual review');
+      needs_review = true;
+    } else if (req.file) {
       const uploadedPath =
         req.file.path ||
         path.join(__dirname, '../../uploads', req.file.filename);
@@ -404,6 +436,8 @@ const createIssue = async (req, res, next) => {
     }
     // ====================================================================
 
+    const tracking_code = await generateUniqueTrackingCode();
+
     const issue = await Issue.create({
       title,
       description,
@@ -414,9 +448,39 @@ const createIssue = async (req, res, next) => {
       status,
       needs_review,
       phash,
+      category: null,
+      classification_confidence: null,
+      tracking_code,
     });
-    console.log('✅ Issue created successfully:', issue.id);
-    return res.status(201).json(issue);
+    console.log('✅ Issue created successfully:', issue.id, 'tracking code:', tracking_code);
+    res.status(201).json(issue);
+
+    // ==================== CNN IMAGE CLASSIFICATION ====================
+    // Classify the uploaded photo via the ml-service microservice (see
+    // ml-service/) — one of 7 categories (Pothole/Garbage/Streetlight/
+    // Sidewalk/Flooding/Road Sign/Other). Runs after the response is sent —
+    // the classification call is network-dependent and shouldn't leave the
+    // submitter's browser hanging. The issue is updated in place once done.
+    if (req.file) {
+      const uploadedPath =
+        req.file.path ||
+        path.join(__dirname, '../../uploads', req.file.filename);
+      classifyImage(uploadedPath)
+        .then((result) =>
+          issue.update({
+            category: result.category,
+            classification_confidence: result.confidence,
+          })
+        )
+        .then(() => {
+          console.log(`🧠 Classified issue ${issue.id} as "${issue.category}"`);
+        })
+        .catch((classifyErr) => {
+          console.warn('⚠️  Classification failed:', classifyErr.message);
+        });
+    }
+    // =====================================================================
+    return;
   } catch (error) {
     console.error('❌ CREATE ISSUE ERROR:', error.message);
     console.error('Stack:', error.stack);
@@ -471,7 +535,7 @@ const updateIssue = async (req, res, next) => {
     // (for example when uploading a file only). Safely default to an
     // empty object so destructuring doesn't throw.
     const body = req.body || {};
-    let { title, description, photo_url, latitude, longitude, status } = body;
+    let { title, description, photo_url, latitude, longitude, status, department } = body;
 
     // When status is sent as a multipart form field, it may be a string.
     // Ensure we're comparing against the correct value.
@@ -487,6 +551,7 @@ const updateIssue = async (req, res, next) => {
       ...(latitude !== undefined && { latitude }),
       ...(longitude !== undefined && { longitude }),
       ...(status !== undefined && { status }),
+      ...(department !== undefined && { department }),
     };
 
     // If a file was uploaded (multipart request), construct the public URL
@@ -514,7 +579,30 @@ const updateIssue = async (req, res, next) => {
         updates.resolved_photo_url = uploadedUrl;
       } else {
         updates.photo_url = uploadedUrl;
+
+        // Re-classify only when the *original* issue photo is replaced —
+        // a resolved/after photo shows the fix, not the original issue
+        // type, so classifying it would produce a misleading category.
+        try {
+          const uploadedPath =
+            req.file.path ||
+            path.join(__dirname, '../../uploads', req.file.filename);
+          const result = await classifyImage(uploadedPath);
+          updates.category = result.category;
+          updates.classification_confidence = result.confidence;
+        } catch (classifyErr) {
+          console.warn('⚠️  Classification failed:', classifyErr.message);
+        }
       }
+    }
+
+    // Stamp resolved_at the first time an issue transitions into 'Resolved' —
+    // powers the resolution-time metric on the analytics dashboard. Only set
+    // once; re-resolving (or resolving via the "after" photo upload branch
+    // above) never overwrites an existing timestamp.
+    const finalStatus = updates.status || issue.status;
+    if (finalStatus === 'Resolved' && issue.status !== 'Resolved' && !issue.resolved_at) {
+      updates.resolved_at = new Date();
     }
 
     if (!Object.keys(updates).length) {
@@ -527,6 +615,101 @@ const updateIssue = async (req, res, next) => {
 
     await issue.update(updates);
     return res.json(issue);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// Re-runs CNN classification on an issue's existing photo on demand (e.g.
+// for legacy issues predating this feature, or after a classification
+// failure at upload time). Powers the "re-classify" action in the admin UI.
+const reclassifyIssue = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { id } = req.params;
+    const issue = await Issue.findByPk(id);
+    if (!issue) {
+      return res.status(404).json({ message: 'Issue not found' });
+    }
+
+    if (!issue.photo_url) {
+      return res.status(400).json({ message: 'Issue has no photo to classify' });
+    }
+
+    let localPath;
+    try {
+      const { pathname } = new URL(issue.photo_url);
+      if (!pathname.startsWith('/uploads/')) {
+        throw new Error('Not a local upload');
+      }
+      localPath = path.join(
+        __dirname,
+        '../../uploads',
+        path.basename(pathname)
+      );
+    } catch (parseErr) {
+      return res.status(400).json({
+        message: 'Photo is not a local upload and cannot be re-classified',
+      });
+    }
+
+    if (!fs.existsSync(localPath)) {
+      return res.status(400).json({ message: 'Photo file not found on server' });
+    }
+
+    const result = await classifyImage(localPath);
+    await issue.update({
+      category: result.category,
+      classification_confidence: result.confidence,
+    });
+
+    // `scores` (the full per-category softmax distribution) isn't persisted
+    // as a DB column — it's included here only so the admin UI's pipeline
+    // visualizer can show the real output distribution, not just the winner.
+    return res.json({ ...issue.toJSON(), scores: result.scores });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// Public, no-login lookup by tracking code — powers the citizen-facing
+// /track page. Returns a deliberately limited subset of fields (no exact
+// lat/lng, no phash/needs_review internals) since anyone with the code can
+// call this without authenticating.
+const trackIssue = async (req, res, next) => {
+  try {
+    const { code } = req.params;
+    if (!code) {
+      return res.status(400).json({ message: 'Tracking code is required' });
+    }
+
+    const issue = await Issue.findOne({
+      where: { tracking_code: code.trim().toUpperCase() },
+    });
+
+    if (!issue) {
+      return res.status(404).json({
+        message: "We couldn't find a report with that tracking code. Double-check it and try again.",
+      });
+    }
+
+    return res.json({
+      tracking_code: issue.tracking_code,
+      title: issue.title,
+      description: issue.description,
+      category: issue.category,
+      department: issue.department,
+      status: issue.status,
+      address: issue.address,
+      photo_url: issue.photo_url,
+      resolved_photo_url: issue.resolved_photo_url,
+      created_at: issue.created_at,
+      resolved_at: issue.resolved_at,
+    });
   } catch (error) {
     return next(error);
   }
@@ -557,5 +740,7 @@ module.exports = {
   getIssues,
   getIssueById,
   updateIssue,
+  reclassifyIssue,
+  trackIssue,
   deleteIssue,
 };

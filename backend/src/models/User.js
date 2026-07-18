@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
+const { departments } = require('./Issue');
 
 const roles = ['citizen', 'staff', 'admin'];
 
@@ -31,6 +32,16 @@ const User = sequelize.define(
       type: DataTypes.ENUM(...roles),
       allowNull: false,
       defaultValue: 'citizen',
+    },
+    // Tags a 'staff' account as belonging to a specific municipal
+    // department (see Transfer to Department). Null for regular
+    // staff/admin accounts, which continue to see every issue.
+    department: {
+      type: DataTypes.STRING(60),
+      allowNull: true,
+      validate: {
+        isIn: [departments],
+      },
     },
   },
   {

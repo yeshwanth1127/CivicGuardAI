@@ -5,6 +5,8 @@ const {
   getIssues,
   getIssueById,
   updateIssue,
+  reclassifyIssue,
+  trackIssue,
   deleteIssue,
 } = require('../controllers/issueController');
 const {
@@ -12,6 +14,7 @@ const {
   authorizeRoles,
 } = require('../middleware/authMiddleware');
 const upload = require('../middleware/upload');
+const { departments } = require('../models');
 
 const router = express.Router();
 
@@ -62,16 +65,25 @@ const updateIssueValidation = [
     .optional()
     .isIn(['Open', 'In Progress', 'Resolved'])
     .withMessage('Status must be Open, In Progress, or Resolved'),
+  body('department')
+    .optional()
+    .isIn(departments)
+    .withMessage(`Department must be one of: ${departments.join(', ')}`),
 ];
 
+// Public — anyone can report an issue, no account required. The Issue model
+// has no reporter/user association, so this was already effectively
+// anonymous under the hood; this just removes the login gate in front of it.
 router.post(
   '/',
-  authenticateToken,
   upload.single('image'),
   createIssueValidation,
   createIssue
 );
 router.get('/', getIssues);
+// Public — no-login lookup by tracking code. Registered before /:id so the
+// two-segment path is unambiguous.
+router.get('/track/:code', trackIssue);
 router.get('/:id', issueIdValidation, getIssueById);
 router.put(
   '/:id',
@@ -81,6 +93,13 @@ router.put(
   issueIdValidation,
   updateIssueValidation,
   updateIssue
+);
+router.post(
+  '/:id/classify',
+  authenticateToken,
+  authorizeRoles('staff', 'admin'),
+  issueIdValidation,
+  reclassifyIssue
 );
 router.delete(
   '/:id',

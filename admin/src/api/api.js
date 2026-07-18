@@ -3,6 +3,11 @@ import axios from "axios";
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
+// ml-service (see ml-service/) — separate Python microservice, called
+// directly from the admin UI for the Model Comparison page.
+const ML_SERVICE_URL =
+  import.meta.env.VITE_ML_SERVICE_URL || "http://localhost:8000";
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   // Do not set a global Content-Type header here. When sending
@@ -26,13 +31,16 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor to handle auth errors
+// Response interceptor to handle auth errors. Only redirect to the login
+// screen for requests that were actually sent with a token — the public
+// report form calls unauthenticated endpoints and shouldn't be bounced to
+// an admin login page if the server ever returns a 401.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && error.config?.headers?.Authorization) {
       localStorage.removeItem("admin_token");
-      window.location.href = "/login";
+      window.location.href = "/admin/login";
     }
     return Promise.reject(error);
   }
@@ -48,6 +56,22 @@ export const adminAuth = {
 
 // Issues API
 export const issuesAPI = {
+  // Public — no auth required. Used by the citizen-facing report form.
+  create: async ({ title, description, latitude, longitude, imageFile, skipMetadataCheck }) => {
+    const formData = new FormData();
+    formData.append("title", title);
+    formData.append("description", description);
+    formData.append("latitude", String(latitude));
+    formData.append("longitude", String(longitude));
+    if (imageFile) {
+      formData.append("image", imageFile);
+    }
+    if (skipMetadataCheck) {
+      formData.append("skip_metadata_check", "true");
+    }
+    const response = await api.post("/issues", formData);
+    return response.data;
+  },
   getAll: async () => {
     const response = await api.get("/issues");
     return response.data;
@@ -60,8 +84,21 @@ export const issuesAPI = {
     const response = await api.put(`/issues/${id}`, { status });
     return response.data;
   },
+  updateDepartment: async (id, department) => {
+    const response = await api.put(`/issues/${id}`, { department });
+    return response.data;
+  },
   delete: async (id) => {
     const response = await api.delete(`/issues/${id}`);
+    return response.data;
+  },
+  classify: async (id) => {
+    const response = await api.post(`/issues/${id}/classify`);
+    return response.data;
+  },
+  // Public — no auth required. Used by the citizen-facing tracking page.
+  track: async (code) => {
+    const response = await api.get(`/issues/track/${encodeURIComponent(code)}`);
     return response.data;
   },
   uploadImage: async (id, imageFile, extra = {}) => {
@@ -76,6 +113,14 @@ export const issuesAPI = {
     });
 
     const response = await api.put(`/issues/${id}`, formData);
+    return response.data;
+  },
+};
+
+// Model comparison — served by ml-service, not the Node backend.
+export const modelComparisonAPI = {
+  get: async () => {
+    const response = await axios.get(`${ML_SERVICE_URL}/models/comparison`);
     return response.data;
   },
 };

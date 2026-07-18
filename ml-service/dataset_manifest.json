@@ -1,0 +1,52 @@
+{
+  "_comment": "Fill in actual counts/sources/licenses as raw_dataset/<Category>/ is populated, then re-generate after running scripts/prepare_dataset.py. Mirrors the provenance-tracking pattern from the old backend/ml/dataset-manifest.json.",
+  "categories": {
+    "Pothole": {
+      "sources": [
+        "Kaggle: atulyakumar98/pothole-detection-dataset",
+        "RDD2022 (Road Damage Detection 2022)"
+      ],
+      "count": null
+    },
+    "Garbage": {
+      "sources": [
+        "Kaggle: asdasdasasdas/garbage-classification",
+        "TACO (Trash Annotations in Context) — street-litter subset"
+      ],
+      "count": null
+    },
+    "Streetlight": {
+      "sources": [
+        "Manual/scraped collection (no strong public dataset found — see README risk note)"
+      ],
+      "count": null
+    },
+    "Sidewalk": {
+      "sources": [
+        "RDD2022 (crack imagery)",
+        "Kaggle: concrete crack classification datasets"
+      ],
+      "count": null
+    },
+    "Flooding": {
+      "sources": [
+        "Kaggle: street-level flooding/waterlogging datasets"
+      ],
+      "count": null
+    },
+    "Road Sign": {
+      "sources": [
+        "Roboflow Universe / Mapillary traffic-sign datasets, curated for damaged/broken signs"
+      ],
+      "count": null
+    },
+    "Other": {
+      "sources": [
+        "General street-scene images without any of the above issues"
+      ],
+      "count": null
+    }
+  },
+  "split": { "train": 0.7, "val": 0.15, "test": 0.15 },
+  "generated_at": null
+}

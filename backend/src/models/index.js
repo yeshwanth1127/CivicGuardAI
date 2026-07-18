@@ -1,6 +1,6 @@
 const { sequelize } = require('../config/db');
 const { User, roles } = require('./User');
-const { Issue, statuses } = require('./Issue');
+const { Issue, statuses, categories, departments } = require('./Issue');
 
 module.exports = {
   sequelize,
@@ -8,5 +8,6 @@ module.exports = {
   Issue,
   roles,
   statuses,
+  categories,
+  departments,
 };
-

@@ -1,24 +1,37 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Box,
   Typography,
   Button,
   CircularProgress,
   Alert,
-  Chip,
   Paper,
   IconButton,
   Tooltip,
   Stack,
   TextField,
+  InputAdornment,
+  Fade,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import {
   Visibility as ViewIcon,
   Delete as DeleteIcon,
+  Search as SearchIcon,
+  Refresh as RefreshIcon,
+  Assignment as TotalIcon,
+  Schedule as OpenIcon,
+  Autorenew as ProgressIcon,
+  CheckCircle as ResolvedIcon,
+  ReportProblem as ReviewIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { issuesAPI } from "../api/api";
+import StatusChip from "../components/StatusChip";
+import ReviewChip from "../components/ReviewChip";
+import CategoryChip from "../components/CategoryChip";
+import StatTile from "../components/StatTile";
+import { tokens } from "../theme";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -26,6 +39,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [filterReviewOnly, setFilterReviewOnly] = useState(false);
 
   useEffect(() => {
     fetchIssues();
@@ -53,111 +67,87 @@ const Dashboard = () => {
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "Open":
-        return "warning";
-      case "In Progress":
-        return "info";
-      case "Resolved":
-        return "success";
-      default:
-        return "default";
-    }
-  };
-
-  const [filterReviewOnly, setFilterReviewOnly] = useState(false);
+  const stats = useMemo(
+    () => ({
+      total: issues.length,
+      open: issues.filter((i) => i.status === "Open").length,
+      inProgress: issues.filter((i) => i.status === "In Progress").length,
+      resolved: issues.filter((i) => i.status === "Resolved").length,
+      needsReview: issues.filter((i) => i.needs_review).length,
+    }),
+    [issues]
+  );
 
   const columns = [
     {
       field: "thumb",
       headerName: "",
-      width: 80,
+      width: 72,
       sortable: false,
       filterable: false,
       renderCell: (params) => (
-        <img
+        <Box
+          component="img"
           src={
             params.row.photo_url ||
             params.row.resolved_photo_url ||
             "https://images.unsplash.com/photo-1529429617124-aee711fa4eec?auto=format&fit=crop&w=200&q=60"
           }
           alt="thumb"
-          style={{ width: 56, height: 40, objectFit: "cover", borderRadius: 6 }}
+          sx={{
+            width: 48,
+            height: 40,
+            objectFit: "cover",
+            borderRadius: 1.5,
+            border: "1px solid",
+            borderColor: "divider",
+          }}
         />
       ),
-    },
-    {
-      field: "index",
-      headerName: "#",
-      width: 60,
-      headerAlign: "center",
-      align: "center",
-      sortable: false,
-      filterable: false,
-    },
-    {
-      field: "id",
-      headerName: "ID",
-      width: 80,
-      headerAlign: "center",
-      align: "center",
     },
     {
       field: "title",
       headerName: "Title",
-      // Reduce the title column width so it doesn't take up too much space
-      // and allow the actions column to remain visible.
       width: 220,
-      flex: 0,
+      flex: 1,
+      renderCell: (params) => (
+        <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+          {params.value}
+        </Typography>
+      ),
     },
     {
       field: "status",
       headerName: "Status",
-      width: 130,
-      headerAlign: "center",
-      align: "center",
-      renderCell: (params) => (
-        <Chip
-          label={params.value}
-          color={getStatusColor(params.value)}
-          size="small"
-        />
-      ),
+      width: 140,
+      renderCell: (params) => <StatusChip status={params.value} size="small" />,
     },
     {
-      field: "needs_review",
-      headerName: "Review Status",
-      width: 130,
-      headerAlign: "center",
-      align: "center",
+      field: "category",
+      headerName: "Category",
+      width: 150,
       renderCell: (params) =>
         params.value ? (
-          <Chip
-            label="Needs Review"
-            color="error"
-            size="small"
-            variant="outlined"
-          />
+          <CategoryChip category={params.value} size="small" />
         ) : (
-          <Chip
-            label="Verified"
-            color="success"
-            size="small"
-            variant="outlined"
-          />
+          <Typography variant="caption" color="text.secondary">
+            —
+          </Typography>
         ),
     },
     {
-      field: "created_at",
-      headerName: "Created Date",
+      field: "needs_review",
+      headerName: "Review",
       width: 150,
-      headerAlign: "center",
-      align: "center",
+      renderCell: (params) => <ReviewChip needsReview={params.value} size="small" />,
+    },
+    {
+      field: "created_at",
+      headerName: "Created",
+      width: 150,
       renderCell: (params) => {
         const dateValue = params.row.created_at || params.row.createdAt;
         if (!dateValue) return "";
-
         try {
           const date = new Date(dateValue);
           if (isNaN(date.getTime())) return "";
@@ -168,71 +158,68 @@ const Dashboard = () => {
             hour: "2-digit",
             minute: "2-digit",
           });
-        } catch (error) {
+        } catch {
           return "";
         }
       },
     },
     {
       field: "actions",
-      headerName: "Actions",
-      // Make actions wider so both View and Delete buttons fit comfortably
-      // without wrapping or being hidden.
-      width: 180,
-      headerAlign: "center",
-      align: "center",
+      headerName: "",
+      width: 110,
       sortable: false,
+      filterable: false,
       renderCell: (params) => (
-        <Box sx={{ display: "flex", gap: 1 }}>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<ViewIcon />}
-            onClick={() => navigate(`/issue/${params.row.id}`)}
-          >
-            View
-          </Button>
-          <Button
-            variant="outlined"
-            color="error"
-            size="small"
-            startIcon={<DeleteIcon />}
-            onClick={async (e) => {
-              // Prevent row click propagation
-              e.stopPropagation();
-              const id = params.row.id;
-              const ok = window.confirm(
-                "Are you sure you want to delete this issue? This action cannot be undone."
-              );
-              if (!ok) return;
-              try {
-                setLoading(true);
-                await issuesAPI.delete(id);
-                // refresh list
-                await fetchIssues();
-                setError("");
-              } catch (err) {
-                setError(
-                  err.response?.data?.message ||
-                    err.message ||
-                    "Failed to delete issue"
+        <Stack direction="row" spacing={0.5}>
+          <Tooltip title="View">
+            <IconButton
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/admin/issue/${params.row.id}`);
+              }}
+              sx={{ color: "text.secondary" }}
+            >
+              <ViewIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete">
+            <IconButton
+              size="small"
+              sx={{ color: tokens.critical }}
+              onClick={async (e) => {
+                e.stopPropagation();
+                const id = params.row.id;
+                const ok = window.confirm(
+                  "Are you sure you want to delete this issue? This action cannot be undone."
                 );
-              } finally {
-                setLoading(false);
-              }
-            }}
-          >
-            Delete
-          </Button>
-        </Box>
+                if (!ok) return;
+                try {
+                  setLoading(true);
+                  await issuesAPI.delete(id);
+                  await fetchIssues();
+                  setError("");
+                } catch (err) {
+                  setError(
+                    err.response?.data?.message ||
+                      err.message ||
+                      "Failed to delete issue"
+                  );
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
       ),
     },
   ];
 
   const filteredIssues = issues.filter((issue) => {
-    if (filterReviewOnly && !issue.needs_review) {
-      return false;
-    }
+    if (filterReviewOnly && !issue.needs_review) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -243,103 +230,169 @@ const Dashboard = () => {
     );
   });
 
-  if (loading) {
+  if (loading && issues.length === 0) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
+      <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}>
         <CircularProgress />
       </Box>
     );
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        sx={{ mb: 2 }}
-      >
-        <Typography variant="h4" component="h1">
-          Issues Dashboard
-        </Typography>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <TextField
-            size="small"
-            placeholder="Search issues..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <Button
-            variant={filterReviewOnly ? "contained" : "outlined"}
-            color={filterReviewOnly ? "error" : "inherit"}
-            size="small"
-            onClick={() => setFilterReviewOnly(!filterReviewOnly)}
-          >
-            {filterReviewOnly
-              ? `Needs Review (${issues.filter((i) => i.needs_review).length})`
-              : "Show Needs Review"}
-          </Button>
-          <Tooltip title="Refresh">
-            <IconButton onClick={fetchIssues}>
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M21 12a9 9 0 10-2.53 6.06"
-                  stroke="#374151"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </IconButton>
-          </Tooltip>
-        </Stack>
-      </Stack>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-
-      <Paper sx={{ p: 2, borderRadius: 2, boxShadow: 2 }}>
-        <Box sx={{ height: 640, width: "100%" }}>
-          <DataGrid
-            rows={filteredIssues || []}
-            columns={columns}
-            pageSize={10}
-            rowsPerPageOptions={[10, 25, 50]}
-            disableSelectionOnClick
-            getRowId={(row) => row.id || row._id}
-            initialState={{
-              sorting: {
-                sortModel: [{ field: "created_at", sort: "desc" }],
-              },
-            }}
-            sx={{
-              "& .MuiDataGrid-root": {
-                border: "none",
-              },
-              "& .MuiDataGrid-cell": {
-                borderBottom: "1px solid #f0f0f0",
-              },
-              "& .MuiDataGrid-columnHeaders": {
-                backgroundColor: "#f8f9fa",
-                borderBottom: "2px solid #e0e0e0",
-              },
-              "& .MuiDataGrid-row:hover": {
-                backgroundColor: "#fbfdff",
-              },
-            }}
-          />
+    <Fade in timeout={350}>
+      <Box sx={{ p: { xs: 2, md: 3 } }}>
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h4" sx={{ mb: 0.5 }}>
+            Issues
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Review, verify, and track civic issue reports.
+          </Typography>
         </Box>
-      </Paper>
-    </Box>
+
+        <Stack
+          direction="row"
+          spacing={1.5}
+          sx={{ mb: 3, flexWrap: "wrap", rowGap: 1.5 }}
+        >
+          <StatTile
+            icon={<TotalIcon fontSize="small" />}
+            label="Total Issues"
+            value={stats.total}
+            color={tokens.primary}
+            delay={0}
+          />
+          <StatTile
+            icon={<OpenIcon fontSize="small" />}
+            label="Open"
+            value={stats.open}
+            color={tokens.warning}
+            delay={40}
+          />
+          <StatTile
+            icon={<ProgressIcon fontSize="small" />}
+            label="In Progress"
+            value={stats.inProgress}
+            color={tokens.primary}
+            delay={80}
+          />
+          <StatTile
+            icon={<ResolvedIcon fontSize="small" />}
+            label="Resolved"
+            value={stats.resolved}
+            color={tokens.good}
+            delay={120}
+          />
+          <StatTile
+            icon={<ReviewIcon fontSize="small" />}
+            label="Needs Review"
+            value={stats.needsReview}
+            color={tokens.critical}
+            delay={160}
+          />
+        </Stack>
+
+        {error && (
+          <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+            {error}
+          </Alert>
+        )}
+
+        <Paper sx={{ p: 2.5, borderRadius: 4 }} variant="outlined">
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            alignItems={{ sm: "center" }}
+            justifyContent="space-between"
+            spacing={1.5}
+            sx={{ mb: 2 }}
+          >
+            <TextField
+              size="small"
+              placeholder="Search issues…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              sx={{ maxWidth: 320 }}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon fontSize="small" sx={{ color: "text.secondary" }} />
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Button
+                variant={filterReviewOnly ? "contained" : "outlined"}
+                color={filterReviewOnly ? "error" : "inherit"}
+                size="small"
+                onClick={() => setFilterReviewOnly(!filterReviewOnly)}
+              >
+                {filterReviewOnly
+                  ? `Needs Review (${stats.needsReview})`
+                  : "Show Needs Review"}
+              </Button>
+              <Tooltip title="Refresh">
+                <IconButton onClick={fetchIssues} size="small">
+                  <RefreshIcon
+                    fontSize="small"
+                    sx={{
+                      animation: loading ? "spin 0.8s linear infinite" : "none",
+                      "@keyframes spin": {
+                        from: { transform: "rotate(0deg)" },
+                        to: { transform: "rotate(360deg)" },
+                      },
+                    }}
+                  />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </Stack>
+
+          <Box sx={{ height: 600, width: "100%" }}>
+            <DataGrid
+              rows={filteredIssues || []}
+              columns={columns}
+              disableRowSelectionOnClick
+              getRowId={(row) => row.id || row._id}
+              pageSizeOptions={[10, 25, 50]}
+              initialState={{
+                pagination: { paginationModel: { pageSize: 10 } },
+                sorting: { sortModel: [{ field: "created_at", sort: "desc" }] },
+              }}
+              slots={{
+                noRowsOverlay: () => (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      height: "100%",
+                      color: "text.secondary",
+                      gap: 1,
+                    }}
+                  >
+                    <Typography variant="body2">No issues match your filters.</Typography>
+                  </Box>
+                ),
+              }}
+              sx={{
+                "& .MuiDataGrid-row": { cursor: "pointer" },
+                "& .MuiDataGrid-row:hover": {
+                  backgroundColor: "rgba(42,120,214,0.04)",
+                },
+                "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": {
+                  outline: "none",
+                },
+              }}
+              onRowClick={(params) => navigate(`/admin/issue/${params.row.id}`)}
+            />
+          </Box>
+        </Paper>
+      </Box>
+    </Fade>
   );
 };
 
