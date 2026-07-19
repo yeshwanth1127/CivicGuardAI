@@ -12,7 +12,9 @@ from PIL import Image
 
 ARTIFACTS_DIR = Path(__file__).resolve().parent.parent / "artifacts"
 WINNING_MODEL_DIR = ARTIFACTS_DIR / "winning_model"
-IMAGE_SIZE = (224, 224)
+# Must match training/evaluate.py IMAGE_SIZE — the served model was trained on
+# images this size, so inputs must be resized to the same dimensions.
+IMAGE_SIZE = (160, 160)
 
 PREPROCESSORS = {
     "rescale": lambda x: x / 255.0,

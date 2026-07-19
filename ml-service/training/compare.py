@@ -58,17 +58,29 @@ def write_results(results, winner):
     (ARTIFACTS_DIR / "comparison_results.json").write_text(json.dumps(payload, indent=2))
 
 
-def main(dataset_dir, epochs, fine_tune_epochs, smoke_test):
-    ARTIFACTS_DIR.mkdir(exist_ok=True)
+def main(dataset_dir, epochs, fine_tune_epochs, smoke_test, artifacts_dir=None, resume=False):
+    # Allow pointing artifacts at Google Drive so results survive a Colab
+    # session timeout — combined with --resume, a re-run picks up where it
+    # left off instead of retraining everything.
+    global ARTIFACTS_DIR
+    if artifacts_dir:
+        ARTIFACTS_DIR = Path(artifacts_dir)
+    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
     (ARTIFACTS_DIR / "confusion_matrices").mkdir(exist_ok=True)
     (ARTIFACTS_DIR / "training_curves").mkdir(exist_ok=True)
 
     results = {}
     for arch in ARCHITECTURES:
-        print(f"\n=== Training {arch} ===")
         output_dir = ARTIFACTS_DIR / "runs" / arch
-        metrics = run(arch, dataset_dir, output_dir, epochs=epochs,
-                       fine_tune_epochs=fine_tune_epochs, smoke_test=smoke_test)
+        metrics_path = output_dir / "metrics.json"
+
+        if resume and metrics_path.exists():
+            print(f"\n=== Skipping {arch} (already trained — found {metrics_path}) ===")
+            metrics = json.loads(metrics_path.read_text())
+        else:
+            print(f"\n=== Training {arch} ===")
+            metrics = run(arch, dataset_dir, output_dir, epochs=epochs,
+                           fine_tune_epochs=fine_tune_epochs, smoke_test=smoke_test)
         results[arch] = metrics
 
         plot_confusion_matrix(metrics["confusion_matrix"], metrics["class_names"],
@@ -96,9 +108,17 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=25)
     parser.add_argument("--fine-tune-epochs", type=int, default=10)
     parser.add_argument("--smoke-test", action="store_true")
+    parser.add_argument("--artifacts-dir", default=None,
+                        help="Where to write results. Point this at a Google Drive "
+                             "path to survive a Colab timeout.")
+    parser.add_argument("--resume", action="store_true",
+                        help="Skip any architecture that already has metrics.json "
+                             "in the artifacts dir. Re-run the same command after a "
+                             "disconnect to continue where you left off.")
     args = parser.parse_args()
 
     if not args.all and not args.smoke_test:
         parser.error("Pass --all to run the full comparison, or --smoke-test for a quick sanity run.")
 
-    main(args.dataset_dir, args.epochs, args.fine_tune_epochs, args.smoke_test)
+    main(args.dataset_dir, args.epochs, args.fine_tune_epochs, args.smoke_test,
+         artifacts_dir=args.artifacts_dir, resume=args.resume)

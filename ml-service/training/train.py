@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from evaluate import (  # noqa: E402
+    IMAGE_SIZE,
     evaluate_model,
     load_datasets,
     measure_inference_latency_ms,
@@ -29,7 +30,7 @@ def run(arch, dataset_dir, output_dir, epochs=25, fine_tune_epochs=10, smoke_tes
     output_dir.mkdir(parents=True, exist_ok=True)
 
     train_ds, val_ds, test_ds, class_names = load_datasets(dataset_dir, module.PREPROCESSING)
-    model, base_model = module.build_model(len(class_names))
+    model, base_model = module.build_model(len(class_names), input_shape=(*IMAGE_SIZE, 3))
 
     if smoke_test:
         train_ds, val_ds, test_ds = train_ds.take(2), val_ds.take(1), test_ds.take(1)

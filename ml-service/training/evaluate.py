@@ -9,7 +9,11 @@ import numpy as np
 import tensorflow as tf
 from sklearn.metrics import classification_report, confusion_matrix
 
-IMAGE_SIZE = (224, 224)
+# 160x160 instead of the usual 224x224: ~2x less compute per image (a 160px
+# image has ~half the pixels), which roughly halves training time with almost
+# no accuracy loss for this 3-class problem. Every model uses this same size,
+# so the comparison stays fair. Keep app/inference.py's IMAGE_SIZE in sync.
+IMAGE_SIZE = (160, 160)
 BATCH_SIZE = 32
 SEED = 42
 
