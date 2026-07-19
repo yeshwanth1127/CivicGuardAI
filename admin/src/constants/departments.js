@@ -12,10 +12,6 @@ export const DEPARTMENTS = [
 // category — the admin can always override it before sending.
 export const CATEGORY_DEPARTMENT_SUGGESTION = {
   Pothole: 'Roads & Infrastructure',
-  Garbage: 'Sanitation & Waste Management',
-  Streetlight: 'Electrical & Street Lighting',
   Sidewalk: 'Roads & Infrastructure',
-  Flooding: 'Water & Drainage',
-  'Road Sign': 'Roads & Infrastructure',
   Other: 'General Administration',
 };

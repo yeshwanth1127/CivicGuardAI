@@ -2,15 +2,7 @@ const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
 
 const statuses = ['Open', 'In Progress', 'Resolved'];
-const categories = [
-  'Pothole',
-  'Garbage',
-  'Streetlight',
-  'Sidewalk',
-  'Flooding',
-  'Road Sign',
-  'Other',
-];
+const categories = ['Pothole', 'Sidewalk', 'Other'];
 const departments = [
   'Roads & Infrastructure',
   'Sanitation & Waste Management',

@@ -18,11 +18,7 @@ export const REVIEW_META = {
 // a category chip is never mistaken for a status chip.
 export const CATEGORY_META = {
   Pothole: { color: '#c65a2e', label: 'Pothole' },
-  Garbage: { color: '#1baf7a', label: 'Garbage' },
-  Streetlight: { color: '#4a3aa7', label: 'Streetlight' },
   Sidewalk: { color: '#a8842e', label: 'Sidewalk' },
-  Flooding: { color: '#1a7fb8', label: 'Flooding' },
-  'Road Sign': { color: '#b8348f', label: 'Road Sign' },
   Other: { color: tokens.textMuted, label: 'Other' },
 };
 
