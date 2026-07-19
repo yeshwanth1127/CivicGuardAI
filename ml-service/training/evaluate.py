@@ -13,11 +13,16 @@ IMAGE_SIZE = (224, 224)
 BATCH_SIZE = 32
 SEED = 42
 
+# Stronger augmentation = more effective training variety, which is the single
+# biggest lever against overfitting on a small dataset. Every model in the
+# comparison sees the same augmentation, so this stays a fair comparison.
 AUGMENTATION = tf.keras.Sequential([
     tf.keras.layers.RandomFlip("horizontal"),
-    tf.keras.layers.RandomRotation(0.08),
-    tf.keras.layers.RandomZoom(0.1),
-    tf.keras.layers.RandomBrightness(0.1),
+    tf.keras.layers.RandomRotation(0.12),
+    tf.keras.layers.RandomZoom(0.15),
+    tf.keras.layers.RandomTranslation(0.1, 0.1),
+    tf.keras.layers.RandomContrast(0.1),
+    tf.keras.layers.RandomBrightness(0.15),
 ])
 
 PREPROCESSORS = {
@@ -59,8 +64,10 @@ def load_datasets(dataset_dir, preprocessing, batch_size=BATCH_SIZE, augment_tra
 def train_model(model, base_model, train_ds, val_ds, from_scratch,
                  epochs=25, fine_tune_epochs=10, fine_tune_layers=30):
     callbacks = [
-        tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=5, restore_best_weights=True),
-        tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=3),
+        # More patience so a temporarily noisy val_loss doesn't stop training
+        # early, and always keep the best-generalizing weights (not the last).
+        tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=8, restore_best_weights=True),
+        tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=3, min_lr=1e-6),
     ]
 
     model.compile(optimizer=tf.keras.optimizers.Adam(1e-3),
