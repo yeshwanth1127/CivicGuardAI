@@ -14,7 +14,10 @@ ARTIFACTS_DIR = Path(__file__).resolve().parent.parent / "artifacts"
 WINNING_MODEL_DIR = ARTIFACTS_DIR / "winning_model"
 
 PREPROCESSORS = {
-    "rescale": lambda x: x / 255.0,
+    # Identity — the custom CNN / AlexNet do their own /255 via an internal
+    # Rescaling layer, so we must NOT divide here too (that would rescale
+    # twice). Matches training/evaluate.py's "rescale" preprocessor.
+    "rescale": lambda x: x,
     "vgg16": tf.keras.applications.vgg16.preprocess_input,
     "vgg19": tf.keras.applications.vgg19.preprocess_input,
     "inception": tf.keras.applications.inception_v3.preprocess_input,
