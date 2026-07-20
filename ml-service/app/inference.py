@@ -12,9 +12,6 @@ from PIL import Image
 
 ARTIFACTS_DIR = Path(__file__).resolve().parent.parent / "artifacts"
 WINNING_MODEL_DIR = ARTIFACTS_DIR / "winning_model"
-# Must match training/evaluate.py IMAGE_SIZE — the served model was trained on
-# images this size, so inputs must be resized to the same dimensions.
-IMAGE_SIZE = (160, 160)
 
 PREPROCESSORS = {
     "rescale": lambda x: x / 255.0,
@@ -27,10 +24,11 @@ PREPROCESSORS = {
 _model = None
 _labels = None
 _preprocess_fn = None
+_image_size = None
 
 
 def _load():
-    global _model, _labels, _preprocess_fn
+    global _model, _labels, _preprocess_fn, _image_size
     if _model is None:
         model_path = WINNING_MODEL_DIR / "model.keras"
         if not model_path.exists():
@@ -40,16 +38,21 @@ def _load():
                 "artifacts/ output here first."
             )
         _model = tf.keras.models.load_model(model_path)
+        # Read the expected input resolution off the model itself, so inference
+        # always matches whatever size the winning architecture was trained at
+        # (no hardcoded size to drift out of sync). input_shape is (None, H, W, 3).
+        shape = _model.input_shape
+        _image_size = (int(shape[1]), int(shape[2]))
         _labels = json.loads((WINNING_MODEL_DIR / "labels.json").read_text())
         metadata = json.loads((WINNING_MODEL_DIR / "metrics.json").read_text())
         _preprocess_fn = PREPROCESSORS[metadata["preprocessing"]]
-    return _model, _labels, _preprocess_fn
+    return _model, _labels, _preprocess_fn, _image_size
 
 
 def classify_image(image_bytes):
-    model, labels, preprocess_fn = _load()
+    model, labels, preprocess_fn, image_size = _load()
 
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB").resize(IMAGE_SIZE)
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB").resize(image_size)
     array = np.expand_dims(np.array(image, dtype=np.float32), axis=0)
     array = preprocess_fn(array)
 

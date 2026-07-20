@@ -1,0 +1,9 @@
+# Serving-only dependencies (no training libs like sklearn/matplotlib/seaborn).
+# TensorFlow pinned to match the version the model was trained/saved with on
+# Colab, so the saved .keras loads cleanly. CPU build — inference doesn't need a GPU.
+tensorflow-cpu==2.20.0
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+pillow==10.4.0
+numpy

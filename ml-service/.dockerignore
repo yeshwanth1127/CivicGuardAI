@@ -1,0 +1,16 @@
+# Keep the build context small — exclude everything the served API doesn't need.
+# (The Dockerfile only COPYs app/, artifacts/winning_model/, and
+# artifacts/comparison_results.json.)
+dataset/
+raw_dataset/
+dataset.zip
+artifacts/runs/
+artifacts/confusion_matrices/
+artifacts/training_curves/
+training/
+scripts/
+__pycache__/
+*.pyc
+venv/
+.venv/
+.git/
